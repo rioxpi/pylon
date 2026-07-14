@@ -142,6 +142,35 @@ int main() {
                     }
                     break;
                 }
+                case 3: {
+                    std::vector<uint8_t> payload(req_header.data_len);
+                    if (read_exact(sock, payload.data(), req_header.data_len)) {
+                        std::string filepath(payload.begin(), payload.end());
+
+                        std::ifstream in_file(filepath, std::ios::binary | std::ios::ate);
+                        if (!in_file) {
+                            send_response(sock, 5, "File not exists");
+                        } else {
+                            std::streamsize file_size = in_file.tellg();
+                            in_file.seekg(0, std::ios::beg);
+
+                            std::vector<char> file_buffer (file_size);
+                            if (in_file.read(file_buffer.data(), file_size)) {
+                                PacketHeader resp_header {};
+                                resp_header.command_id = htonl(3);
+                                resp_header.data_len = htonl(static_cast<uint32_t>(file_size));
+
+                                send(sock, &resp_header, sizeof(resp_header), 0);
+                                send(sock, file_buffer.data(), file_size, 0);
+                            } else {
+                                send_response(sock, 5, "Read error");
+                            }
+
+                            in_file.close();
+                        }
+                    }
+                    break;
+                }
                 case 4: { // exit
                     session_active = false;
                     terminate_agent = true;
