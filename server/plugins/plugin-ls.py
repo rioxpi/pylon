@@ -11,7 +11,7 @@ def initialize(network):
     app = network
 
 def execute():
-    data = app.execute_command("ls -l", 1)
+    data = app.execute_command("ls -l", 1) # type: ignore
     return parse_data(data)
 
 def parse_data(data : str) -> str:

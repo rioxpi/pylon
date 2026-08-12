@@ -9,9 +9,11 @@ BUILD_DIR = build
 
 TARGET = $(BUILD_DIR)/agent
 TARGET_STATIC = $(BUILD_DIR)/agent_static
+TARGET_STAGER = $(BUILD_DIR)/stager
 SRC = $(AGENT_DIR)/agent.cpp
+STAGER_SRC = $(AGENT_DIR)/stager.c
 
-.PHONY: all clean agent static server
+.PHONY: all clean agent static server stager
 
 all: agent
 
@@ -26,7 +28,7 @@ static:$(SRC)
 		@echo "static compiled"
 
 server:
-		python3 $(SERVER_DIR)/main.py
+		cd $(SERVER_DIR) && python3 main.py
 	
 clean:
 		rm -rf $(BUILD_DIR)
