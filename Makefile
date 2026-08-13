@@ -32,3 +32,7 @@ server:
 	
 clean:
 		rm -rf $(BUILD_DIR)
+stager: $(STAGER_SRC)
+		@mkdir -p $(BUILD_DIR)
+		gcc -O3 -nostdlib -static -no-pie -s -fno-ident -fno-asynchronous-unwind-tables -fno-stack-protector -ffunction-sections -fdata-sections -Wl,--gc-sections $(STAGER_SRC) -o $(TARGET_STAGER)
+		@echo "Compiled"
