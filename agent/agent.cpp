@@ -133,9 +133,18 @@ void run_pyt_shell(int sock) {
     send(sock, eof_seq.c_str(), eof_seq.size(), 0);
 }
 
-int main() {
+int main(int argc, char* argv[]) {
     const char* server_ip = "127.0.0.1";
     int port = 9001;
+    if (argc == 1){
+        
+    } else if (argc == 3) {
+        server_ip = argv[1];
+        port = std::stoi(argv[2]);
+    } else {
+        return 1;
+    }
+
 
     while (true) {
         int sock = socket(AF_INET, SOCK_STREAM, 0);

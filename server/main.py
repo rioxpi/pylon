@@ -10,7 +10,7 @@ import tty
 
 from core.plugins_engine import PluginsEngine
 
-HOST = "127.0.0.1"
+HOST = "0.0.0.0"
 PORT = 9001
 
 
@@ -238,10 +238,10 @@ def pre_shell():
                 s_ip, s_port = parts[1], parts[2]
 
                 stager_bin_path = "../build/stager"
-                agent_bin_path = "../build/agent"
+                agent_bin_path = "../build/agent_static"
 
                 if not os.path.exists(agent_bin_path):
-                    subprocess.run(["make", "agent"], cwd="..", check=False)
+                    subprocess.run(["make", "static"], cwd="..", check=False)
 
                 if not os.path.exists(stager_bin_path):
                     subprocess.run(["make", "stager"], cwd="..", check=False)
